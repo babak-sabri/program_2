@@ -2,6 +2,7 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use App\DataService\DataServiceInterface;
 
 class DataSourceProvider extends ServiceProvider
 {
@@ -12,12 +13,15 @@ class DataSourceProvider extends ServiceProvider
      */
     public function register()
     {
-		foreach (config('data-sources') as $source=>$class) {
-			$this->app->bind(
-				"{$source}-data-source",
-				$class
-			);
-		}
+        $source         = request()->get('source');
+        $handlerClass   = config('data-sources.'.$source, false);
+        if(!$handlerClass) {
+            throw new \Exception('Invalid data source selected');
+        }
+        $this->app->bind(
+            DataServiceInterface::class,
+            $handlerClass
+        );
 	}
 
     /**

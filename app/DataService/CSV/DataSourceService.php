@@ -2,83 +2,88 @@
 namespace App\DataService\CSV;
 
 use App\DataService\DataServiceInterface;
-use Illuminate\Support\Facades\File;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Arr;
 
 class DataSourceService implements DataServiceInterface
 {
-	private $rawData;
-	
+	private $data;
+
 	public function __construct()
 	{
-		$this->rawData	= explode("\n", File::get(storage_path().'/transactions.csv'));
-		Arr::forget($this->rawData, 0);
+	    $filePath   = storage_path().'/transactions.csv';
+	    if(file_exists($filePath)) {
+            $file       = fopen($filePath, 'r');
+            fgetcsv($file);
+            while(!feof($file)) {
+                $row    =   fgetcsv($file);
+                $this->data[$row[0]] = [
+                    'id'            => (int)$row[0],
+                    'code'          => $row[1],
+                    'amount'        => (double)$row[2],
+                    'user_id'       => (int)$row[3],
+                    'created_at'    => $row[4],
+                    'updated_at'    => $row[5]
+                ];
+            }
+        }
 	}
-	
-	private function getRecord($row)
-	{
-		return [
-			'id'			=> str_replace('"', '', trim(Arr::get($row, 0))),
-			'code'			=> str_replace('"', '', trim(Arr::get($row, 1))),
-			'amount'		=> str_replace('"', '', trim(Arr::get($row, 2))),
-			'user_id'		=> str_replace('"', '', trim(Arr::get($row, 3))),
-			'created_at'	=> str_replace('"', '', trim(Arr::get($row, 4))),
-			'updated_at'	=> str_replace('"', '', trim(Arr::get($row, 5)))
-		];
-	}
-	
+
 	/**
 	 * retrieve all transactions
-	 * 
-	 * @return mixed 
+	 *
+	 * @return mixed
 	 */
 	public function all()
 	{
-		$result	= [];
-		foreach ($this->rawData as $row) {
-			if(trim($row)!='') {
-				$result[]	= $this->getRecord(explode(',', $row));
-			}
-		}
-		return $result;
+	    [, $values] = Arr::divide($this->data);
+        return $values;
 	}
-	
+
 	/**
 	 * retrieve a transaction by id
-	 * 
+	 *
 	 * @param int $transactionId
-	 * @return mixed 
+	 * @return mixed
 	 */
 	public function getById(int $transactionId)
 	{
-		foreach ($this->rawData as $row) {
-			if(trim($row)!='') {
-				$row	= $this->getRecord(explode(',', $row));
-				if($row['id']==$transactionId) {
-					return $row;
-				}
-			}
-		}
-		throw new ModelNotFoundException();
+	    $row    = Arr::get($this->data, $transactionId, false);
+	    if(!$row) {
+            throw new ModelNotFoundException();
+        }
+	    return $row;
 	}
-	
+
 	/**
 	 * retrieve a user`s transactions
 	 * @param int $userId
-	 * @return mixed 
+	 * @return mixed
 	 */
 	public function getUserTransactions(int $userId)
 	{
-		$result	= [];
-		foreach ($this->rawData as $row) {
-			if(trim($row)!='') {
-				$row	= $this->getRecord(explode(',', $row));
-				if($row['user_id']==$userId) {
-					$result[]	= $row;
-				}
-			}
-		}
-		return $result;
+	    return $this->filterByKey('user_id', $userId);
 	}
+
+    /**
+     * Filter data array by given key
+     * @param $key key
+     * @param $value search value
+     * @param false $keepRowKeys keep the key of rows
+     * @return array|mixed
+     */
+	private function filterByKey($key, $value, $keepRowKeys=false)
+    {
+        $result = Arr::where($this->data, function ($row) use($key, $value) {
+            if(Arr::get($row, $key)==$value) {
+                return $row;
+            }
+        });
+
+        if(!$keepRowKeys) {
+            [, $result] = Arr::divide($result);
+        }
+
+        return $result;
+    }
 }
